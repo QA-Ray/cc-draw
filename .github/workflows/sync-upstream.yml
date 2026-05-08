@@ -1,0 +1,69 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "17 1 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/yizhiyanhua-ai/fireworks-tech-graph.git
+          git fetch upstream main --tags
+
+      - name: Sync (fast-forward if possible, else open PR)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Already up to date with upstream/main."
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor HEAD upstream/main; then
+            echo "Fork is strictly behind — fast-forwarding main."
+            git merge --ff-only upstream/main
+            git push origin main
+            git push origin --tags
+            exit 0
+          fi
+
+          BRANCH="sync/upstream-$(date +%Y%m%d-%H%M%S)"
+          echo "Diverged — opening PR on $BRANCH."
+          git checkout -b "$BRANCH"
+
+          if ! git merge --no-edit upstream/main; then
+            echo "::warning::Merge conflict — committing markers for human review."
+            git add -A
+            git commit -m "sync: upstream merge with conflicts (manual resolution needed)"
+          fi
+
+          git push origin "$BRANCH"
+
+          if gh pr list --head "$BRANCH" --json number --jq 'length' | grep -q '^0$'; then
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "sync: upstream $(date +%Y-%m-%d)" \
+              --body  "Automated sync from yizhiyanhua-ai/fireworks-tech-graph@main. Review the diff and merge if it looks clean. If there are conflict markers, resolve them locally before merging."
+          fi
