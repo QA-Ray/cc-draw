@@ -36,25 +36,30 @@ Examples:
     $0 -t class -s 2 -w 2400
     $0 -t sequence -s 6
 USAGE
-    exit 0
+    exit "${1:-0}"
 }
 
 # Parse arguments
+require_arg() { if [[ $# -lt 2 || "$2" == -* ]]; then echo -e "${RED}Error: $1 requires a value${NC}"; usage 1; fi; }
 while [[ $# -gt 0 ]]; do
     case $1 in
         -t|--type)
+            require_arg "$@"
             TYPE="$2"
             shift 2
             ;;
         -s|--style)
+            require_arg "$@"
             STYLE="$2"
             shift 2
             ;;
         -o|--output)
+            require_arg "$@"
             OUTPUT_PATH="$2"
             shift 2
             ;;
         -w|--width)
+            require_arg "$@"
             WIDTH="$2"
             shift 2
             ;;
@@ -67,7 +72,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            usage
+            usage 1
             ;;
     esac
 done
@@ -75,7 +80,7 @@ done
 # Check required parameters
 if [ -z "${TYPE:-}" ]; then
     echo -e "${RED}Error: Diagram type is required${NC}"
-    usage
+    usage 1
 fi
 
 # Validate type
@@ -136,17 +141,40 @@ if [ -f "$SVG_FILE" ]; then
 
     # Export PNG
     echo -e "\n${BLUE}Exporting PNG (width: ${WIDTH}px)...${NC}"
-    if command -v rsvg-convert &> /dev/null; then
-        if rsvg-convert -w "$WIDTH" "$SVG_FILE" -o "$PNG_FILE" 2>/dev/null; then
-            PNG_SIZE=$(du -h "$PNG_FILE" | cut -f1)
-            echo -e "${GREEN}PNG exported: $PNG_FILE (${PNG_SIZE})${NC}"
+
+    # Compute scale for cairosvg (default scale=2 ≈ 1920px wide for 960 viewBox)
+    SCALE=$(python3 -c "import sys; print(round(float(sys.argv[1])/960, 2))" "$WIDTH" 2>/dev/null || echo "2")
+
+    PNG_OK=false
+
+    # Method 1 (preferred): cairosvg — best CSS support, good fidelity
+    if python3 -c "import cairosvg" 2>/dev/null; then
+        echo -e "${BLUE}Using cairosvg (recommended)...${NC}"
+        if python3 -c "import sys, cairosvg; cairosvg.svg2png(url=sys.argv[1], write_to=sys.argv[2], scale=float(sys.argv[3]))" "$SVG_FILE" "$PNG_FILE" "$SCALE" 2>/dev/null; then
+            PNG_OK=true
         else
-            echo -e "${RED}PNG export failed${NC}"
-            exit 1
+            echo -e "${YELLOW}cairosvg failed, falling back...${NC}"
         fi
+    fi
+
+    # Method 2 (fallback): rsvg-convert — may drop CSS / foreignObject
+    if [ "$PNG_OK" = false ] && command -v rsvg-convert &> /dev/null; then
+        echo -e "${BLUE}Using rsvg-convert (fallback)...${NC}"
+        echo -e "${YELLOW}Warning: rsvg-convert may drop CSS styles or <foreignObject> — install cairosvg for better fidelity${NC}"
+        echo -e "${YELLOW}  pip install cairosvg${NC}"
+        if rsvg-convert -w "$WIDTH" "$SVG_FILE" -o "$PNG_FILE" 2>/dev/null; then
+            PNG_OK=true
+        fi
+    fi
+
+    if [ "$PNG_OK" = true ]; then
+        PNG_SIZE=$(du -h "$PNG_FILE" | cut -f1)
+        echo -e "${GREEN}PNG exported: $PNG_FILE (${PNG_SIZE})${NC}"
     else
-        echo -e "${RED}Error: rsvg-convert not found${NC}"
-        echo "Install with: brew install librsvg"
+        echo -e "${RED}PNG export failed${NC}"
+        echo -e "${YELLOW}Install one of:${NC}"
+        echo -e "  ${YELLOW}pip install cairosvg${NC}        (recommended)"
+        echo -e "  ${YELLOW}brew install librsvg${NC}        (macOS)  /  apt install librsvg2-bin (Debian)"
         exit 1
     fi
 else
