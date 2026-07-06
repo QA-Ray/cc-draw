@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-blue)](https://claude.ai/code)
-[![7 Visual Styles](https://img.shields.io/badge/Styles-7-purple)]()
+[![8 Visual Styles](https://img.shields.io/badge/Styles-8-purple)]()
 [![14 Diagram Types](https://img.shields.io/badge/Diagram%20Types-14-green)]()
 [![UML Support](https://img.shields.io/badge/UML-Full%20Support-orange)]()
 
@@ -14,7 +14,7 @@
 
 ## Overview
 
-`fireworks-tech-graph` turns natural language descriptions into polished SVG diagrams, then exports them as high-resolution PNG via `rsvg-convert`. It ships with **7 visual styles** and deep knowledge of AI/Agent domain patterns (RAG, Agentic Search, Mem0, Multi-Agent, Tool Call flows), plus full support for all 14 UML diagram types.
+`fireworks-tech-graph` turns natural language descriptions into polished SVG diagrams, then exports them as high-resolution PNG via `cairosvg` (recommended), with `rsvg-convert` and `puppeteer` available as alternatives. It ships with **7 template styles** and **1 AI-authored style (Dark Luxury)** and deep knowledge of AI/Agent domain patterns (RAG, Agentic Search, Mem0, Multi-Agent, Tool Call flows), plus full support for all 14 UML diagram types.
 
 ```
 User: "Generate a Mem0 memory architecture diagram, dark style"
@@ -40,7 +40,7 @@ If you are building agent infrastructure, AI IDEs, internal copilots, developer 
 
 ## Showcase
 
-> All samples exported at 1920px width (2× retina) via `rsvg-convert`. PNG is lossless and the right choice for technical diagrams — sharp edges, no JPEG compression artifacts on text/lines.
+> All samples exported at 1920px width (2× retina) via `cairosvg`. PNG is lossless and the right choice for technical diagrams — sharp edges, no JPEG compression artifacts on text/lines.
 
 ### Style 1 — Flat Icon (default)
 *Mem0 Memory Architecture — white background, semantic arrows, layered memory system*
@@ -69,6 +69,10 @@ If you are building agent infrastructure, AI IDEs, internal copilots, developer 
 ### Style 7 — OpenAI Official
 *API Integration Flow — pure white background, OpenAI brand palette, modern minimalist design*
 ![Style 7 — OpenAI Official](assets/samples/sample-style7-openai.png)
+
+### Style 8 — Dark Luxury *(AI-authored)*
+*Sopify Adaptive Workflow Engine — deep black background, champagne gold accents, serif titles, six-bucket color wheel*
+![Style 8 — Dark Luxury](assets/samples/sample-style8-dark-luxury.png)
 
 ---
 
@@ -130,11 +134,21 @@ Include Application, OpenAI SDK Layer, Prompt Builder, Model Runtime, Tool Calls
 Keep the look minimal, white, precise, and modern with clean green-accented arrows.
 ```
 
+### Style 8 — Dark Luxury *(AI-authored)*
+> Style 8 is not a template-driven style. The AI reads `references/style-8-dark-luxury.md` and hand-crafts the SVG directly.
+
+```text
+Draw a system architecture diagram in style 8 (Dark Luxury).
+Use a deep black background (#0a0a0a), champagne gold (#d4a574) for titles and cluster labels,
+and spread node colors across the full color wheel: emerald, violet, sky blue, rose, amber, cool-gray.
+Apply Georgia serif only for the main title and section labels (≥11px); use sans-serif for all node text and arrow labels.
+```
+
 ---
 
 ## Features
 
-- **7 visual styles** — from clean white docs to dark neon to frosted glass to official brand styles
+- **8 visual styles** — 7 template-driven (Flat Icon to OpenAI Official) + 1 AI-authored (Dark Luxury)
 - **Executable style system** — style guides are encoded into the generator, not only documented in markdown
 - **14 diagram types** — Full UML support (Class, Component, Deployment, Package, Composite Structure, Object, Use Case, Activity, State Machine, Sequence, Communication, Timing, Interaction Overview, ER Diagram) plus AI/Agent domain diagrams
 - **AI/Agent domain patterns** — RAG, Agentic Search, Mem0, Multi-Agent, Tool Call, and more built-in
@@ -143,7 +157,7 @@ Keep the look minimal, white, precise, and modern with clean green-accented arro
 - **Product icons** — 40+ products with brand colors: OpenAI, Anthropic, Pinecone, Weaviate, Kafka, PostgreSQL…
 - **Swim lane grouping** — automatic layer labeling for complex architectures
 - **SVG + PNG output** — SVG for editing, 1920px PNG for embedding
-- **rsvg-convert compatible** — no external font fetching, pure inline SVG
+- **Renderer-friendly** — pure inline SVG, no external font fetching; renders cleanly in cairosvg, rsvg-convert, and headless Chrome
 
 ---
 
@@ -179,16 +193,29 @@ git clone https://github.com/yizhiyanhua-ai/fireworks-tech-graph.git ~/.claude/s
 
 ## Requirements
 
+Pick **one** PNG renderer (cairosvg recommended):
+
 ```bash
-# macOS
-brew install librsvg
+# Recommended: cairosvg (best CSS support)
+pip install cairosvg
 
-# Ubuntu/Debian
-sudo apt install librsvg2-bin
+# Fallback: rsvg-convert (system package; may drop CSS / <foreignObject>)
+brew install librsvg                   # macOS
+sudo apt install librsvg2-bin          # Ubuntu/Debian
 
-# Verify
+# Highest fidelity: puppeteer (real Chromium; heavy)
+npm install puppeteer
+
+# Verify (any one is enough)
+python3 -c "import cairosvg; print(cairosvg.__version__)"
 rsvg-convert --version
 ```
+
+| Renderer | Quality | Install Cost | Use When |
+|----------|---------|--------------|----------|
+| **cairosvg** | ✅ Good | Single `pip install` | Default — best balance |
+| rsvg-convert | ⚠️ Fair | System package | No Python available, simple flat diagrams |
+| puppeteer | ✅✅ Best | Node + ~150MB Chromium | Browser-generated SVG (D3, Mermaid) or pixel-perfect required |
 
 ---
 
@@ -527,11 +554,13 @@ fireworks-tech-graph/
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| PNG is blank or all-black | `@import url()` in SVG — rsvg-convert can't fetch fonts | Remove `@import`, use system font stack |
-| PNG not generated | `rsvg-convert` not installed | `brew install librsvg` (macOS) or `apt install librsvg2-bin` |
+| PNG is blank or all-black | `@import url()` in SVG — neither cairosvg nor rsvg-convert can fetch external fonts | Remove `@import`, use system font stack |
+| PNG not generated | No renderer installed | `pip install cairosvg` (recommended), or `brew install librsvg` / `apt install librsvg2-bin` |
+| Borders or text missing in PNG | Using `rsvg-convert` on SVG with CSS / `<foreignObject>` | Switch to `cairosvg` (`pip install cairosvg`) — much better CSS support |
 | Diagram cut off at bottom | ViewBox height too short | Increase `height` in `viewBox="0 0 960 <height>"` |
 | Text overflowing boxes | Labels too long | Add `text-anchor="middle"` + `<clipPath>` or shorten label |
-| Icons not rendering | External CDN URL in rsvg-convert context | Use inline SVG paths from `references/icons.md` |
+| Icons not rendering | External CDN URL | Use inline SVG paths from `references/icons.md` |
+| Browser-generated SVG renders incorrectly | cairosvg / rsvg can't replay all CSS/JS-injected styles | Use the puppeteer script in `SKILL.md` for 100% fidelity |
 
 ---
 
