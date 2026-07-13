@@ -1,38 +1,28 @@
 ---
 name: fireworks-tech-graph
 description: >-
-  Use when the user wants to create any technical diagram - architecture, data
-  flow, flowchart, sequence, agent/memory, or concept map - and export as
-  SVG+PNG. Trigger on: "画图" "帮我画" "生成图" "做个图" "架构图" "流程图"
-  "可视化一下" "出图" "generate diagram" "draw diagram" "visualize" or any
-  system/flow description the user wants illustrated.
+  Create technical diagrams such as software architecture, data flow,
+  flowcharts, sequence diagrams, agent/memory systems, UML, ER, network
+  topology, timelines, and technical concept maps, then export SVG+PNG. Use
+  when the user asks to draw or visualize a system, workflow, protocol, model,
+  or engineering concept. Do not use for photos, raster illustrations, image
+  editing, decorative artwork, or quantitative data charts.
 ---
 
 # Fireworks Tech Graph
 
-Generate production-quality SVG technical diagrams exported as PNG via `rsvg-convert`.
+Generate production-quality SVG technical diagrams exported as PNG via `cairosvg` (recommended), `rsvg-convert`, or `puppeteer`.
 
-## Install Source
+## Runtime Compatibility
 
-Install this skill from GitHub:
+Use this repository unchanged in both Codex and Claude Code. It follows the Agent Skills layout: `SKILL.md` is the shared entry point, bundled resources use relative paths, and `agents/openai.yaml` adds optional Codex UI metadata without affecting Claude Code.
 
-```bash
-npx skills add yizhiyanhua-ai/fireworks-tech-graph
-```
+Before reading a reference or running a script, resolve the directory containing this `SKILL.md` as `SKILL_ROOT`. Do not assume the current working directory is the skill directory, and do not assume a variable set in one shell call persists into the next.
 
-Public package page:
+- In Claude Code, use `${CLAUDE_SKILL_DIR}`.
+- In Codex, use the absolute skill directory shown in the loaded skill metadata.
 
-```text
-https://www.npmjs.com/package/@yizhiyanhua-ai/fireworks-tech-graph
-```
-
-Do not pass `@yizhiyanhua-ai/fireworks-tech-graph` directly to `skills add`, because the CLI expects a GitHub or local repository source.
-
-Update command:
-
-```bash
-npx skills add yizhiyanhua-ai/fireworks-tech-graph --force -g -y
-```
+Every command block below sets `SKILL_ROOT` itself. In Codex, replace `/absolute/path/from-codex-skill-metadata` with the absolute skill directory before running the command.
 
 ## Helper Scripts (Recommended)
 
@@ -40,15 +30,18 @@ Four helper scripts in `scripts/` directory provide stable SVG generation and va
 
 ### 1. `generate-diagram.sh` - Validate SVG + export PNG
 ```bash
-./scripts/generate-diagram.sh -t architecture -s 1 -o ./output/arch.svg
+SKILL_ROOT="${CLAUDE_SKILL_DIR:-/absolute/path/from-codex-skill-metadata}"
+"$SKILL_ROOT/scripts/generate-diagram.sh" -t architecture -s 1 -o ./output/arch.svg
 ```
 - Validates an existing SVG file
 - Exports PNG after validation
-- Example: `./scripts/generate-diagram.sh -t architecture -s 1 -o ./output/arch.svg`
+- Example: `"$SKILL_ROOT/scripts/generate-diagram.sh" -t architecture -s 1 -o ./output/arch.svg`
 
 ### 2. `generate-from-template.py` - Create starter SVG from template
 ```bash
-python3 ./scripts/generate-from-template.py architecture ./output/arch.svg '{"title":"My Diagram","nodes":[],"arrows":[]}'
+SKILL_ROOT="${CLAUDE_SKILL_DIR:-/absolute/path/from-codex-skill-metadata}"
+mkdir -p ./output
+python3 "$SKILL_ROOT/scripts/generate-from-template.py" architecture ./output/arch.svg '{"title":"My Diagram","nodes":[],"arrows":[]}'
 ```
 - Loads a built-in SVG template
 - Renders nodes, arrows, and legend entries from JSON input
@@ -56,7 +49,8 @@ python3 ./scripts/generate-from-template.py architecture ./output/arch.svg '{"ti
 
 ### 3. `validate-svg.sh` - Validate SVG syntax
 ```bash
-./scripts/validate-svg.sh <svg-file>
+SKILL_ROOT="${CLAUDE_SKILL_DIR:-/absolute/path/from-codex-skill-metadata}"
+"$SKILL_ROOT/scripts/validate-svg.sh" <svg-file>
 ```
 - Checks XML syntax
 - Verifies tag balance
@@ -66,7 +60,8 @@ python3 ./scripts/generate-from-template.py architecture ./output/arch.svg '{"ti
 
 ### 4. `test-all-styles.sh` - Batch test all styles
 ```bash
-./scripts/test-all-styles.sh
+SKILL_ROOT="${CLAUDE_SKILL_DIR:-/absolute/path/from-codex-skill-metadata}"
+"$SKILL_ROOT/scripts/test-all-styles.sh"
 ```
 - Tests multiple diagram sizes
 - Validates all generated SVGs
@@ -87,21 +82,33 @@ python3 ./scripts/generate-from-template.py architecture ./output/arch.svg '{"ti
 1. **Classify** the diagram type (see Diagram Types below)
 2. **Extract structure** — identify layers, nodes, edges, flows, and semantic groups from user description
 3. **Plan layout** — apply the layout rules for the diagram type
-4. **Load style reference** — always load `references/style-1-flat-icon.md` unless user specifies another; load the matching `references/style-N.md` for exact color tokens and SVG patterns
+4. **Load style reference** — always load `$SKILL_ROOT/references/style-1-flat-icon.md` unless user specifies another; load the matching `$SKILL_ROOT/references/style-N-*.md` for exact color tokens and SVG patterns
 5. **Map nodes to shapes** — use Shape Vocabulary below
-6. **Check icon needs** — load `references/icons.md` for known products
+6. **Check icon needs** — load `$SKILL_ROOT/references/icons.md` for known products
 7. **Write SVG** with adaptive strategy (see SVG Generation Strategy below)
-8. **Validate**: Run `rsvg-convert file.svg -o /dev/null 2>&1` to check syntax
-9. **Export PNG**: `rsvg-convert -w 1920 file.svg -o file.png`
+8. **Validate**: Run `"$SKILL_ROOT/scripts/validate-svg.sh" file.svg` to check XML, marker references, arrow-component collisions, and renderability
+9. **Export PNG**: Use `cairosvg` (recommended). Load `$SKILL_ROOT/references/png-export.md` when choosing another renderer
 10. **Report** the generated file paths
-11. **(Optional) Visual self-review** — if your runtime can read images, load the exported PNG back and inspect it. Syntactic validity does not guarantee visual correctness: arrows may cross through component interiors, labels may collide with lifelines or other labels, boxes may overlap, alt-frame text may sit on top of a message, or a legend may cover content. If you see any of these, revise the SVG and re-export; repeat until the rendered image is clean. Common fixes:
+11. **Visual review gate** — if your runtime can read images, load the exported PNG back and inspect it. Syntactic validity does not guarantee visual correctness: arrows may cross through component interiors, labels may collide with lifelines or other labels, boxes may overlap, alt-frame text may sit on top of a message, or a legend may cover content. If you see any of these, revise the SVG and re-export, with at most two focused correction passes. Common fixes:
     - Route arrows through gaps between boxes, not through box interiors
-    - Add background rects behind arrow labels (opacity 0.95, matching canvas color)
+    - Move arrow labels 6-8px away from the arrow line (offset-first); add background rects only when offset is insufficient
     - Widen inter-row/inter-column gutters so same-layer arrows have clear corridors
     - Collapse repeated cross-layer arrows into a single "delegates down" rail outside the content area
     - Move legend/notes out of any region where arrows or labels land
     - Increase viewBox height/width rather than packing elements tighter
-  Skip this step silently if image reading is unavailable — do not guess.
+    - If a filtered element (drop-shadow, blur) is missing one side of its border, move it ≥30px away from that viewBox edge, or remove the filter and rely on color/contrast for visual separation
+  Report `visual_review: passed` after inspection. If image reading is unavailable, report `visual_review: skipped (image reader unavailable)` — do not guess or claim visual correctness.
+
+## Rule Precedence
+
+Use this order when instructions disagree:
+
+1. The user's explicit content and style request
+2. The selected `$SKILL_ROOT/references/style-N-*.md` visual tokens (palette, typography, corner radius, shadow treatment)
+3. Diagram-type layout rules and semantic flow requirements in this file
+4. Universal defaults and examples
+
+Geometry and validation gates always remain active: style guidance cannot justify unreadable text, missing marker definitions, or arrows crossing component interiors. Tables in this file define semantic defaults; a selected style may override their colors and stroke treatment while preserving the meaning and direction of each flow.
 
 ## Diagram Types & Layout Rules
 
@@ -300,7 +307,7 @@ Map semantic concepts to consistent shapes across all diagram types:
 
 ## Arrow Semantics
 
-Always assign arrow meaning, not just color:
+Always assign arrow meaning, not just color. The values below are defaults; the selected style reference overrides colors and stroke weights while preserving flow semantics:
 
 | Flow Type | Color | Stroke | Dash | Meaning |
 |-----------|-------|--------|------|---------|
@@ -322,7 +329,8 @@ Always include a **legend** when 2+ arrow types are used.
 - Snap to 8px grid: horizontal 120px intervals, vertical 120px intervals
 
 **Arrow Labels** (CRITICAL):
-- MUST have background rect: `<rect fill="canvas_bg" opacity="0.95"/>` with 4px horizontal, 2px vertical padding
+- **Offset-first** (default): place label 6-8px above horizontal arrows, or 8px left/right of vertical arrows — do not overlap the arrow line
+- **Background fallback**: add `<rect fill="canvas_bg" opacity="0.95"/>` only when the offset label still crosses another visual element (another arrow, a node edge, etc.)
 - Place mid-arrow, ≤3 words, stagger by 15-20px when multiple arrows converge
 - Maintain 10px safety distance from nodes
 
@@ -331,8 +339,40 @@ Always include a **legend** when 2+ arrow types are used.
 - Anchor arrows on component edges, not geometric centers
 - Route around dense node clusters, use different y-offsets for parallel arrows
 - Jump-over arcs (5px radius) for unavoidable crossings
+- Compress equivalent bidirectional traffic only when both directions share the same semantics and styling: use one corridor with `marker-start` + `marker-end`, or two visibly offset paths in that corridor
+- Keep read/write, request/response, sync/async, or differently labeled directions as separate arrows; remove redundant bends and duplicate rails without erasing direction or meaning
 
-**Line Overlap Prevention** (CRITICAL - most common bug on Codex):
+**Post-Generation Arrow Optimization**:
+
+When a user asks to "优化箭头" / "fix arrow routing" / "optimize the diagram" on an already-generated diagram, preserve all nodes, containers, styles, and layout — only modify the `arrows` entries in the JSON data, then re-render with `generate-from-template.py`.
+
+Available arrow override fields (in recommended order of use):
+
+| Field | Type | When to Use |
+|-------|------|-------------|
+| `source_port` / `target_port` | `"left"` / `"right"` / `"top"` / `"bottom"` | Arrow exits/enters from the wrong edge |
+| `corridor_x` | `[x, ...]` | Hint vertical segments toward this x lane (soft preference) |
+| `corridor_y` | `[y, ...]` | Hint horizontal segments toward this y lane (soft preference) |
+| `route_points` | `[[x1,y1], [x2,y2], ...]` | Force exact waypoints (bypasses auto-routing); keep segments orthogonal |
+| `routing_padding` | number (default: 24) | *(Advanced)* Adjust obstacle clearance for this arrow |
+| `port_clearance` | number | *(Advanced)* Adjust first-segment offset from node edge |
+| `label_style` | `"badge"` / `"offset"` | Choose `"offset"` when badge backgrounds create visual clutter; keep `"badge"` (default) for legacy/high-contrast labels |
+
+For JSON/template rendering, the default remains `"badge"` for backward compatibility. Set `"label_style": "offset"` on individual arrows when you want offset-first labels without background rects.
+
+Optimization steps:
+1. Read the existing SVG — identify which arrows overlap, cross nodes, or look misaligned
+2. Find those arrows in the JSON data by `source` / `target` pair
+3. Add `source_port` / `target_port` if the exit/entry direction is wrong; add `corridor_x` / `corridor_y` to space parallel arrows apart; use `route_points` only when hints alone cannot resolve the path
+4. Re-run `generate-from-template.py` with the updated JSON and validate with `validate-svg.sh`
+
+Example — spacing two overlapping arrows into separate corridors:
+```json
+{ "source": "nodeA", "target": "nodeB", "corridor_y": [280] }
+{ "source": "nodeC", "target": "nodeD", "corridor_y": [320] }
+```
+
+**Line Overlap Prevention** (CRITICAL - common in AI-generated diagrams):
 When two arrows must cross each other, ALWAYS use jump-over arcs to prevent visual overlap:
 - Crossing horizontal arrows: add a small semicircle arc (radius 5px, stroke same color as arrow, fill none) that "jumps over" the other line
 - SVG pattern for jump-over: use a white/matching-background arc on the lower layer, then draw the upper arc on top
@@ -342,19 +382,25 @@ When two arrows must cross each other, ALWAYS use jump-over arcs to prevent visu
 **Validation Checklist** (run before finalizing):
 1. **Arrow-Component Collision**: Arrows MUST NOT pass through component interiors (route around with orthogonal paths)
 2. **Text Overflow**: All text MUST fit with 8px padding (estimate: `text.length × 7px ≤ shape_width - 16px`)
-3. **Arrow-Text Alignment**: Arrow endpoints MUST connect to shape edges (not floating); all arrow labels MUST have background rects
+3. **Arrow-Text Alignment**: Arrow endpoints MUST connect to shape edges (not floating); arrow labels should not overlap arrow lines (use offset positioning or background rects)
 4. **Container Discipline**: Prefer arrows entering and leaving section containers through open gaps between components, not through inner component bodies
+5. **Filter Boundary Safety**: For every element with `filter="url(...)"`, verify `(element_x + element_width + filter_extension) ≤ viewBox_width` AND `element_x ≥ filter_extension`. The default filter region extends 10-20% beyond bbox; staying near viewBox edges causes Chrome/cairosvg to clip the element's edge-side stroke (one side of the border vanishes while other sides render correctly)
+6. **Arrow-Title Collision**: Arrows MUST NOT cross through section/container title text or region labels (font-size ≥ 13px). For smaller annotations (< 13px), prefer routing around but tolerate if layout constraints require it. *(Visual self-review check — not covered by `validate-svg.sh` automated checks)*
+7. **Frame Label–Arrow Alignment** (sequence diagrams): Section/frame label badges MUST be vertically centered with their first message arrow. Compute `badge_y = first_arrow_y - (badge_height / 2)`. When appending new sections to an existing diagram, verify alignment matches the existing sections — this is the most common regression when adding content incrementally. Use variables in Python list generation to enforce the constraint: `sec_y = 840; badge_y = sec_y - 9  # for height=18 badge`
+8. **Marker Integrity**: Every `marker-start`, `marker-mid`, and `marker-end` URL MUST resolve to a `<marker id="...">` definition
+9. **Visual Review Status**: Report whether the exported PNG was visually inspected; automated validation does not cover every text, legend, or arrow-arrow collision
 
 ## SVG Technical Rules
 
 - ViewBox: `0 0 960 600` default; `0 0 960 800` tall; `0 0 1200 600` wide
-- Fonts: embed via `<style>font-family: ...</style>` — no external `@import` (breaks rsvg-convert)
+- Fonts: embed via `<style>font-family: ...</style>` — no external `@import` (cairosvg / rsvg-convert cannot fetch external URLs)
 - `<defs>`: arrow markers, gradients, filters, clip paths
 - Text: minimum 12px, prefer 13-14px labels, 11px sub-labels, 16-18px titles
 - All arrows: `<marker>` with `markerEnd`, sized `markerWidth="10" markerHeight="7"`
 - Drop shadows: `<feDropShadow>` in `<filter>`, apply sparingly (key nodes only)
 - Curved paths: use `M x1,y1 C cx1,cy1 cx2,cy2 x2,y2` cubic bezier for loops/feedback arrows
 - Clip content: use `<clipPath>` if text might overflow a node box
+- Z-order (drawing order): SVG uses painter's model — later elements cover earlier ones. Recommended layer order (bottom → top): ① canvas background ② dashed containers / region backgrounds ③ arrows and connection lines ④ node shapes (rects, circles) ⑤ text labels and annotations ⑥ legends and overlays. When arrows pass near text, draw arrows BEFORE text so text stays readable. Adjust per diagram needs — this is guidance, not rigid.
 
 ## SVG Generation & Error Prevention
 
@@ -390,7 +436,9 @@ EOF
 
 **Validation** (run after generation):
 ```bash
-rsvg-convert file.svg -o /tmp/test.png 2>&1 && echo "✓ Valid" && rm /tmp/test.png
+python3 -c "import xml.etree.ElementTree as ET; ET.parse('file.svg')" && echo "✓ Valid XML"
+# Or use cairosvg as a render-time check:
+python3 -c "import cairosvg; cairosvg.svg2png(url='file.svg', write_to='/tmp/test.png')" && echo "✓ Renders" && rm /tmp/test.png
 ```
 
 **If using `generate-from-template.py`**:
@@ -405,12 +453,17 @@ rsvg-convert file.svg -o /tmp/test.png 2>&1 && echo "✓ Valid" && rm /tmp/test.
 - ❌ `marker-end=` → ✅ `marker-end="url(#arrow)"`
 - ❌ `L 29450` → ✅ `L 290,220`
 - ❌ Missing `</svg>` at end
+- ❌ Element with `filter` near viewBox edge — filter region extends 20% (default) or more beyond bbox; if that region exceeds viewBox, Chrome/cairosvg clip the filter rendering AND can drop the element's own stroke on that side. Keep filtered elements at least `max(20% of element size, shadow blur radius × 3)` away from viewBox edges, or omit the filter.
 
 ## Output
 
 - **Default**: `./[derived-name].svg` and `./[derived-name].png` in current directory
 - **Custom**: user specifies path with `--output /path/` or `输出到 /path/`
-- **PNG export**: `rsvg-convert -w 1920 file.svg -o file.png` (1920px = 2x retina)
+- **PNG export**: see **SVG → PNG Conversion** below
+
+## SVG → PNG Conversion
+
+Use `$SKILL_ROOT/scripts/generate-diagram.sh` by default. Load `$SKILL_ROOT/references/png-export.md` only when selecting a renderer manually, handling CJK/emoji fallback, converting browser-generated SVG, or using the bundled Puppeteer converter.
 
 ## Styles
 
@@ -423,12 +476,13 @@ rsvg-convert file.svg -o /tmp/test.png 2>&1 && echo "✓ Valid" && rm /tmp/test.
 | 5 | **Glassmorphism** | Dark gradient | Product sites, keynotes |
 | 6 | **Claude Official** | Warm cream `#f8f6f3` | Anthropic-style diagrams |
 | 7 | **OpenAI Official** | Pure white `#ffffff` | OpenAI-style diagrams |
+| 8 | **Dark Luxury** *(AI-authored)* | `#0a0a0a` deep black | Architecture docs, premium editorial — hand-craft SVG from `$SKILL_ROOT/references/style-8-dark-luxury.md` |
 
-Load `references/style-N.md` for exact color tokens and SVG patterns.
+Load the matching `$SKILL_ROOT/references/style-N-*.md` for exact color tokens and SVG patterns.
 
 ## Style Selection
 
-**Default**: Style 1 (Flat Icon) for most diagrams. Load `references/style-diagram-matrix.md` for detailed style-to-diagram-type recommendations.
+**Default**: Style 1 (Flat Icon) for most diagrams. Load `$SKILL_ROOT/references/style-diagram-matrix.md` for detailed style-to-diagram-type recommendations.
 
 These patterns appear frequently — internalize them:
 
